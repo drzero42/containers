@@ -97,5 +97,24 @@ if [ "$size" -lt "$MIN_PLAINTEXT_BYTES" ]; then
     die "plaintext export is $size bytes (< MIN_PLAINTEXT_BYTES=$MIN_PLAINTEXT_BYTES); refusing to encrypt a likely-truncated export"
 fi
 
-echo "export OK ($size bytes); encryption not yet implemented" >&2
+step 9 "encrypt with age"
+# Build -r <recipient> args from BITWARDEN_AGE_RECIPIENTS (whitespace-separated).
+# `set --` portably builds an argv from whitespace-split words.
+# shellcheck disable=SC2086
+set -- $BITWARDEN_AGE_RECIPIENTS
+age_args=""
+for r in "$@"; do
+    age_args="$age_args -r $r"
+done
+if [ -z "$age_args" ]; then
+    die "BITWARDEN_AGE_RECIPIENTS expanded to zero recipients"
+fi
+
+out="${BACKUP_DIR}/${FILENAME_PREFIX}-$(date -u +%F).json.age"
+# Intentional: same-day reruns overwrite — that's the refresh story.
+# shellcheck disable=SC2086
+age $age_args -o "$out" < "$plaintext"
+echo "wrote $out" >&2
+
+echo "encryption OK; prune and recovery not yet implemented" >&2
 exit 1
