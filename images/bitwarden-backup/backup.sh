@@ -28,8 +28,7 @@ resolve_secret() {
         if [ ! -r "$file_value" ]; then
             die "$file_name=$file_value: not readable"
         fi
-        # $(...) strips trailing newlines from the command output — that
-        # handles the "trim trailing newline" requirement portably.
+        # $() strips trailing newlines only — deliberate; embedded newlines survive.
         contents=$(cat "$file_value")
         if [ -z "$contents" ]; then
             die "$file_name=$file_value: empty"
@@ -54,7 +53,7 @@ require_env() {
 
 step 1 "resolve and validate inputs"
 
-# Non-secret required inputs (env-only).
+# Order matches the Step-4 test sequence: server → creds → output location.
 require_env BW_SERVER
 
 # Secret required inputs (env or *_FILE).
@@ -62,7 +61,6 @@ resolve_secret BW_CLIENTID
 resolve_secret BW_CLIENTSECRET
 resolve_secret BW_PASSWORD
 
-# Non-secret required inputs that follow the secrets.
 require_env BACKUP_DIR
 require_env BITWARDEN_AGE_RECIPIENTS
 
@@ -70,6 +68,37 @@ require_env BITWARDEN_AGE_RECIPIENTS
 : "${FILENAME_PREFIX:=bitwarden}"
 : "${MIN_PLAINTEXT_BYTES:=1024}"
 
-# Placeholder: subsequent tasks add steps 2..N.
-echo "validation OK (further steps not yet implemented)" >&2
+step 2 "set up tmpfile and cleanup trap"
+plaintext=$(mktemp /tmp/bw-exportXXXXXX)
+trap 'rm -f "$plaintext"' EXIT INT TERM
+
+step 3 "configure bitwarden server"
+bw config server "$BW_SERVER" >/dev/null
+
+step 4 "bw login --apikey"
+# bw login --apikey reads BW_CLIENTID and BW_CLIENTSECRET from the env.
+bw login --apikey >/dev/null
+
+step 5 "bw unlock and capture session"
+BW_SESSION=$(bw unlock --passwordenv BW_PASSWORD --raw)
+export BW_SESSION
+
+step 6 "bw sync"
+bw sync >/dev/null
+
+step 7 "bw export vault to json"
+# --raw is a *global* bw flag; it goes before the subcommand (verified
+# against bw 2026.4.2 --help: examples show `bw --raw export`).
+# --password is documented as applying only to encrypted_json format;
+# we pass it anyway as defensive belt-and-braces against any version that
+# re-prompts for the master password on plaintext export.
+bw --raw export --format json --password "$BW_PASSWORD" > "$plaintext"
+
+step 8 "plaintext sanity check"
+size=$(stat -c%s "$plaintext")
+if [ "$size" -lt "$MIN_PLAINTEXT_BYTES" ]; then
+    die "plaintext export is $size bytes (< MIN_PLAINTEXT_BYTES=$MIN_PLAINTEXT_BYTES); refusing to encrypt a likely-truncated export"
+fi
+
+echo "export OK ($size bytes); encryption not yet implemented" >&2
 exit 1
