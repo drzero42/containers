@@ -53,10 +53,9 @@ require_env() {
 
 step 1 "resolve and validate inputs"
 
-# Order matches the Step-4 test sequence: server → creds → output location.
 require_env BW_SERVER
 
-# Secret required inputs (env or *_FILE).
+# Secrets accept both <VAR> and <VAR>_FILE (k8s mount-as-file).
 resolve_secret BW_CLIENTID
 resolve_secret BW_CLIENTSECRET
 resolve_secret BW_PASSWORD
@@ -69,6 +68,7 @@ require_env BITWARDEN_AGE_RECIPIENTS
 : "${MIN_PLAINTEXT_BYTES:=1024}"
 
 step 2 "set up tmpfile and cleanup trap"
+# busybox mktemp requires the X-run to be the last template chars (no suffix).
 plaintext=$(mktemp /tmp/bw-exportXXXXXX)
 trap 'rm -f "$plaintext"' EXIT INT TERM
 
@@ -87,11 +87,8 @@ step 6 "bw sync"
 bw sync >/dev/null
 
 step 7 "bw export vault to json"
-# --raw is a *global* bw flag; it goes before the subcommand (verified
-# against bw 2026.4.2 --help: examples show `bw --raw export`).
-# --password is documented as applying only to encrypted_json format;
-# we pass it anyway as defensive belt-and-braces against any version that
-# re-prompts for the master password on plaintext export.
+# --raw is a global bw flag — must precede the subcommand (verified on bw 2026.4.2).
+# --password is encrypted_json-only per docs; included defensively in case a version re-prompts.
 bw --raw export --format json --password "$BW_PASSWORD" > "$plaintext"
 
 step 8 "plaintext sanity check"
