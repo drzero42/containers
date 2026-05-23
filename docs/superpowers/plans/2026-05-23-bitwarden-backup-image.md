@@ -134,7 +134,7 @@ Substitute `<WOLFI_DIGEST-from-step-1>`, `<from-step-1>` (BW_VERSION), and `<fro
 
 Notes:
 - `unzip` is in wolfi-base by default (GNU `unzip` at `/usr/bin/unzip`), so it doesn't need installation.
-- Wolfi uses GNU coreutils throughout (`stat`, `find`, `date`, etc.), so the `stat -c%s` syntax in later tasks works without a busybox-vs-GNU caveat.
+- Wolfi-base actually ships **busybox** as the implementation for `sh`, `find`, `stat`, `mktemp`, `date`, `cat`, etc. (verified: `/usr/bin/mktemp -> /usr/bin/busybox`). The `stat -c%s` syntax and `find -maxdepth -name -mtime -delete` flags in later tasks work because busybox is largely GNU-compatible. The notable exception is `mktemp`: busybox `mktemp` requires the trailing `X`s to be the LAST characters in the template — so `mktemp /tmp/bw-export.XXXXXX.json` errors with `Invalid argument`. Use `mktemp /tmp/bw-exportXXXXXX` (no suffix after the X-run) instead. `age` and `wget` are non-busybox (`/usr/bin/age` and `/usr/bin/wget`).
 - `adduser -D -u 1000` (no explicit `-g`) is correct on wolfi's shadow-style `adduser`; the `-g 1000` form from the spec was a busybox idiom. Verify with `adduser --help` if unsure.
 
 - [ ] **Step 4: Write a stub backup.sh**
@@ -442,7 +442,8 @@ Find the lines starting at `# Placeholder: subsequent tasks add steps 2..N.` and
 
 ```sh
 step 2 "set up tmpfile and cleanup trap"
-plaintext=$(mktemp /tmp/bw-export.XXXXXX.json)
+# busybox mktemp requires X's as the last template chars (no .json suffix).
+plaintext=$(mktemp /tmp/bw-exportXXXXXX)
 trap 'rm -f "$plaintext"' EXIT INT TERM
 
 step 3 "configure bitwarden server"
