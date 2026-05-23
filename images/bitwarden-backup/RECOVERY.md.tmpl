@@ -1,0 +1,34 @@
+# Bitwarden vault recovery
+
+This directory contains encrypted exports of a Bitwarden vault. Filenames
+follow `<prefix>-YYYY-MM-DD.json.age`. Each file is an age-encrypted JSON
+export from `bw export --format json`.
+
+## To decrypt one file
+
+You need an age identity (private key) whose public key was listed in
+`BITWARDEN_AGE_RECIPIENTS` at backup time.
+
+```sh
+age -d -i /path/to/your.key -o vault.json <prefix>-YYYY-MM-DD.json.age
+```
+
+The resulting `vault.json` is the raw, unencrypted Bitwarden export. Treat
+it as a plaintext copy of every credential in the vault — store it on an
+encrypted volume only, and shred it when you're done.
+
+## To restore into a Bitwarden vault
+
+1. Stand up a fresh Bitwarden vault (Bitwarden.com account or self-hosted).
+2. Log into the web vault UI.
+3. Tools → Import data → pick "Bitwarden (json)" → upload `vault.json`.
+
+## Why age, not GPG?
+
+`age` is a minimal, modern file-encryption tool. The image only needs to
+produce ciphertext for a list of public-key recipients — `age` ships a
+single static binary, no keyring, no key-server, no metadata leaks.
+
+Public-key recipients are configured per-cluster via the
+`BITWARDEN_AGE_RECIPIENTS` env var, so adding a new recovery key is a
+config change rather than an image change.

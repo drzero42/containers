@@ -28,6 +28,8 @@ RUN adduser -D -u 1000 backup
 COPY backup.sh /usr/local/bin/bitwarden-backup
 RUN chmod 0755 /usr/local/bin/bitwarden-backup
 
+COPY RECOVERY.md.tmpl /usr/share/bitwarden-backup/RECOVERY.md
+
 ENV HOME=/tmp \
     BITWARDENCLI_APPDATA_DIR=/tmp/bw-appdata
 

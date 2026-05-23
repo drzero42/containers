@@ -119,5 +119,10 @@ find "$BACKUP_DIR" -maxdepth 1 -type f \
     -mtime "+${RETENTION_DAYS}" \
     -delete
 
-echo "prune OK; recovery and logout not yet implemented" >&2
-exit 1
+step 11 "refresh RECOVERY.md"
+cp /usr/share/bitwarden-backup/RECOVERY.md "${BACKUP_DIR}/RECOVERY.md"
+
+step 12 "bw logout"
+bw logout >/dev/null
+
+echo "backup complete" >&2
