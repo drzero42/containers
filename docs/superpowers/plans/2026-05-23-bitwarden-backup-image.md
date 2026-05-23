@@ -341,15 +341,17 @@ require_env() {
 
 step 1 "resolve and validate inputs"
 
-# Non-secret required inputs (env-only).
+# Order matches the Step-4 test sequence: server → creds → output location.
 require_env BW_SERVER
-require_env BACKUP_DIR
-require_env BITWARDEN_AGE_RECIPIENTS
 
 # Secret required inputs (env or *_FILE).
 resolve_secret BW_CLIENTID
 resolve_secret BW_CLIENTSECRET
 resolve_secret BW_PASSWORD
+
+# Non-secret required inputs that follow the secrets.
+require_env BACKUP_DIR
+require_env BITWARDEN_AGE_RECIPIENTS
 
 : "${RETENTION_DAYS:=30}"
 : "${FILENAME_PREFIX:=bitwarden}"
