@@ -17,7 +17,7 @@ docker buildx build -t <name>:dev images/<name>
 
 ## Publishing
 
-CI handles publishing — on push to `main`, each image is tagged `latest` and `sha-<short>` and pushed to `ghcr.io/<owner>/<name>`. PRs build but do not push. No manual `docker push` workflow.
+CI handles publishing — on push to `main`, each image is tagged `YYYY-MM-DD-N` (N starts at 1 and increments per same-day rebuild) and `latest`, then pushed to `ghcr.io/<owner>/<name>`. PRs build but do not push. Consumers should pin by tag and digest.
 
 ## Adding a new image
 
