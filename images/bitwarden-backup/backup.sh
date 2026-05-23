@@ -113,5 +113,11 @@ out="${BACKUP_DIR}/${FILENAME_PREFIX}-$(date -u +%F).json.age"
 age "$@" -o "$out" < "$plaintext"
 echo "wrote $out" >&2
 
-echo "encryption OK; prune and recovery not yet implemented" >&2
+step 10 "prune old backups"
+find "$BACKUP_DIR" -maxdepth 1 -type f \
+    -name "${FILENAME_PREFIX}-*.json.age" \
+    -mtime "+${RETENTION_DAYS}" \
+    -delete
+
+echo "prune OK; recovery and logout not yet implemented" >&2
 exit 1
