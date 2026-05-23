@@ -200,20 +200,18 @@ bw logout --help          # must exist
 bw sync --help            # must exist
 ```
 
-- [ ] **Step 3: Resolve any flag drift**
+- [ ] **Step 3: Resolve any flag drift** — verified against bw 2026.4.2 on 2026-05-23:
 
-For each flag the script will use, write below what `--help` actually showed:
+| Script use | `--help` result on 2026.4.2 |
+|---|---|
+| `bw config server <url>` | ✅ documented as `bw config server <url>` |
+| `bw login --apikey` | ✅ `--apikey` accepted; reads `BW_CLIENTID`/`BW_CLIENTSECRET` from env |
+| `bw unlock --passwordenv BW_PASSWORD --raw` | ✅ `--passwordenv <name>` and `--raw` both listed |
+| `bw --raw export --format json --password "$BW_PASSWORD"` | ⚠️ `--raw` is a **global** flag, not a `bw export` option — must come BEFORE the subcommand. Spec line updated in Task 4 step 1. |
+| `bw sync` | ✅ exists |
+| `bw logout` | ✅ exists |
 
-| Script use | `--help` result | OK? |
-|---|---|---|
-| `bw config server <url>` | | |
-| `bw login --apikey` (reads `BW_CLIENTID`/`BW_CLIENTSECRET` from env) | | |
-| `bw unlock --passwordenv BW_PASSWORD --raw` | | |
-| `bw export --raw --format json --password "$BW_PASSWORD"` | | |
-| `bw sync` | | |
-| `bw logout` | | |
-
-If any row is not OK, stop. Adjust the flag spelling for that step in the corresponding task below. Common drift patterns: `--passwordenv` vs `--passwordenv=`, `--password` requiring no quotes vs requiring them.
+Findings recorded so future re-runs of this gate task don't have to redo the work. If a future bw version drifts further, this table will need re-verification.
 
 - [ ] **Step 4: Exit the container shell**
 
@@ -460,9 +458,12 @@ step 6 "bw sync"
 bw sync >/dev/null
 
 step 7 "bw export vault to json"
-# --password is mandatory even with a valid BW_SESSION; without it
-# current bw versions re-prompt interactively and the container hangs.
-bw export --raw --format json --password "$BW_PASSWORD" > "$plaintext"
+# --raw is a *global* bw flag; it goes before the subcommand (verified
+# against bw 2026.4.2 --help: examples show `bw --raw export`).
+# --password is documented as applying only to encrypted_json format;
+# we pass it anyway as defensive belt-and-braces against any version that
+# re-prompts for the master password on plaintext export.
+bw --raw export --format json --password "$BW_PASSWORD" > "$plaintext"
 
 step 8 "plaintext sanity check"
 size=$(stat -c%s "$plaintext")
