@@ -56,17 +56,33 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up crane
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: imjasonh/setup-crane@v0.4
+
       - name: Compute tags
         id: tags
         run: |
+          set -euo pipefail
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           image="ghcr.io/${owner}/${{ matrix.image }}"
           short_sha="${GITHUB_SHA::7}"
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "tags=${image}:latest,${image}:sha-${short_sha}" >> "$GITHUB_OUTPUT"
+            date_today=$(date -u +%F)
+            # crane ls exits non-zero on a not-yet-published image; that's expected on first push.
+            existing=$(crane ls "${image}" 2>/dev/null \
+              | grep -E "^${date_today}-[0-9]+$" \
+              | sed "s/^${date_today}-//" \
+              | sort -n \
+              | tail -1 || true)
+            n=$(( ${existing:-0} + 1 ))
+            tag="${date_today}-${n}"
+            echo "tags=${image}:${tag},${image}:latest" >> "$GITHUB_OUTPUT"
+            echo "load_tag=${image}:${tag}" >> "$GITHUB_OUTPUT"
             echo "push=true" >> "$GITHUB_OUTPUT"
           else
             echo "tags=${image}:pr-${short_sha}" >> "$GITHUB_OUTPUT"
+            echo "load_tag=${image}:pr-${short_sha}" >> "$GITHUB_OUTPUT"
             echo "push=false" >> "$GITHUB_OUTPUT"
           fi
 
