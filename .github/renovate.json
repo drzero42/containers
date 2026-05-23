@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^images/[^/]+/Dockerfile$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.+?) depName=(?<depName>.+?)(?: versioning=(?<versioning>.+?))?(?: extractVersion=(?<extractVersion>.+?))?\\s+ARG \\w+=(?<currentValue>.+?)\\s"
+      ],
+      "versioningTemplate": "{{#if versioning}}{{versioning}}{{else}}semver{{/if}}"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["bitwarden/clients"],
+      "groupName": "bitwarden-cli",
+      "commitMessageTopic": "bitwarden CLI"
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["chainguard/wolfi-base"],
+      "groupName": "wolfi-base",
+      "commitMessageTopic": "wolfi-base"
+    }
+  ]
+}
