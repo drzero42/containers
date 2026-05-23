@@ -2,13 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Land the `ghcr.io/drzero42/bitwarden-backup` image (Dockerfile + POSIX shell entrypoint), extend the shared CI workflow with a per-day `N`-incrementing tag scheme and an entrypoint smoke test, and add a Renovate config that keeps the alpine / age / bw pins fresh.
+**Goal:** Land the `ghcr.io/drzero42/bitwarden-backup` image (Dockerfile + POSIX shell entrypoint), extend the shared CI workflow with a per-day `N`-incrementing tag scheme and an entrypoint smoke test, and add a Renovate config that keeps the wolfi-base digest and the bw release pin fresh.
 
-**Architecture:** Single-stage `alpine:3.23` image with `bw` (downloaded release, sha256-verified) and `age` (apk pin). A POSIX `sh` entrypoint normalizes `*_FILE` inputs, validates required env, runs `bw login → unlock → sync → export`, encrypts to N age recipients, writes to a mounted backup dir, prunes by mtime, and refreshes a static `RECOVERY.md`. CI gains a date-N tagger (via `crane ls`) plus a smoke test that asserts the image exits non-zero with `must be set` on stderr when run without env. Renovate watches the alpine base, the age apk pin, and the bw release pin (version + sha256).
+**Architecture:** Single-stage `chainguard/wolfi-base` image (glibc-based; required because the official `bw-linux-X.zip` is a glibc-dynamic C++ binary) with `bw` (downloaded release, sha256-verified) and `age`/`libstdc++` (apk). A POSIX `sh` entrypoint normalizes `*_FILE` inputs, validates required env, runs `bw login → unlock → sync → export`, encrypts to N age recipients, writes to a mounted backup dir, prunes by mtime, and refreshes a static `RECOVERY.md`. CI gains a date-N tagger (via `crane ls`) plus a smoke test that asserts the image exits non-zero with `must be set` on stderr when run without env. Renovate watches the wolfi-base digest and the bw release pin (version + sha256); `age` rides the wolfi-base digest since wolfi rebuilds daily.
 
-**Tech Stack:** Docker / buildx, GitHub Actions, `imjasonh/setup-crane`, Renovate (GitHub App), alpine 3.23, busybox `sh`, Bitwarden CLI 2026.x, `age` 1.2.x.
+**Tech Stack:** Docker / buildx, GitHub Actions, `imjasonh/setup-crane`, Renovate (GitHub App), `chainguard/wolfi-base` (glibc, apk-tooling), GNU coreutils, Bitwarden CLI 2026.x, `age` 1.3.x.
 
 **Spec reference:** [`docs/superpowers/specs/2026-05-22-bitwarden-backup-image-design.md`](../specs/2026-05-22-bitwarden-backup-image-design.md)
+
+**Plan amendment 2026-05-23:** The spec picked `alpine:3.23` on the assumption that `bw-linux-X.zip` was a static binary. It is not — it is a glibc-dynamic C++ binary that fails even with `gcompat + libstdc++` on alpine (still needs glibc-specific `fcntl64`). After testing options (alpine+npm, debian-slim, wolfi), this plan uses `chainguard/wolfi-base` pinned by digest. Net effect: ~30-50 MB final image (vs ~110 MB on debian-slim), glibc available, alpine-style `apk` tooling. The `age` apk pin from the spec drops — wolfi rebuilds packages daily and the base-image digest pin already controls reproducibility, so `apk add age` (unpinned) is correct here.
 
 ---
 
@@ -38,7 +40,7 @@ Responsibilities:
 - `images/bitwarden-backup/backup.sh` — all entrypoint logic. POSIX `sh`. Ordered steps with `==> step N:` markers.
 - `images/bitwarden-backup/RECOVERY.md.tmpl` — static, non-parameterized recovery instructions; copied verbatim by the entrypoint into `$BACKUP_DIR/RECOVERY.md` each run.
 - `.github/workflows/build.yml` — discover + build + push, now with per-day date-N tag computation (via `crane`) and an entrypoint smoke-test step.
-- `.github/renovate.json` — alpine base (built-in dockerfile manager), `age` apk pin (repology), bw release pin (custom regex manager).
+- `.github/renovate.json` — wolfi-base digest (built-in dockerfile manager), bw release pin (custom regex manager).
 
 ---
 
@@ -48,7 +50,7 @@ Responsibilities:
 - **Verification gating:** A dedicated task (Task 2) verifies the actual `bw` flags on the pinned version before the script depends on them. The spec's open item — "verify the flags actually exist on the pinned version" — is non-skippable.
 - **Frequent commits:** Every task ends with a commit. No commit covers more than one task.
 - **No backwards-compat shims:** First image, no consumers in this repo yet. Move fast on the entrypoint contract; only the cloudzero consumer pin freezes it.
-- **POSIX sh:** No bash-isms in `backup.sh`. `set -eu`, then `set -o pipefail` (busybox ash supports this).
+- **POSIX sh:** No bash-isms in `backup.sh`. `set -eu`; `set -o pipefail` is invoked with `|| true` so the script still works if wolfi's `/bin/sh` happens to be a strict POSIX shell without it. Verify what `/bin/sh` actually points to during Task 1's image-shell session and adjust the disclaimer if needed.
 
 ---
 
@@ -58,9 +60,7 @@ Responsibilities:
 - Create: `images/bitwarden-backup/Dockerfile`
 - Create: `images/bitwarden-backup/backup.sh`
 
-- [ ] **Step 1: Determine current pinned versions**
-
-The spec quotes `BW_VERSION=2026.4.2` and `AGE_VERSION=1.2.1-r15` as samples. Verify both before pinning:
+- [ ] **Step 1: Determine the current bw version and wolfi-base digest**
 
 ```bash
 # Latest bw CLI release tag (looking for cli-v<X.Y.Z>)
@@ -69,14 +69,16 @@ curl -fsSL https://api.github.com/repos/bitwarden/clients/releases \
   | head -5
 ```
 
-Pick the newest stable `cli-v<X.Y.Z>` — write the stripped version (e.g. `2026.4.2`) down for the next step. If the latest is newer than `2026.4.2`, use the newer one.
+Pick the newest stable `cli-v<X.Y.Z>` — write the stripped version (e.g. `2026.4.2`) down for the next step.
 
 ```bash
-# Current age version in alpine 3.23
-docker run --rm alpine:3.23 sh -c 'apk update -q && apk search -x age | head -1'
+# Pull the wolfi-base image and capture its sha256 digest
+docker pull chainguard/wolfi-base:latest
+docker inspect --format='{{index .RepoDigests 0}}' chainguard/wolfi-base:latest
+# Output looks like: chainguard/wolfi-base@sha256:<64-hex>
 ```
 
-Note the exact `age-<X.Y.Z>-r<N>` and use `<X.Y.Z>-r<N>` for `AGE_VERSION`. If the printed line is `age-1.2.1-r15`, then `AGE_VERSION=1.2.1-r15`.
+Note the `sha256:<64-hex>` suffix — this is your `WOLFI_DIGEST`.
 
 - [ ] **Step 2: Compute the bw zip sha256**
 
@@ -91,18 +93,20 @@ Note the 64-hex output for `BW_SHA256`.
 - [ ] **Step 3: Write the Dockerfile**
 
 ```dockerfile
-FROM alpine:3.23
-
-# renovate: datasource=repology depName=alpine_3_23/age versioning=loose
-ARG AGE_VERSION=<from-step-1>
+FROM chainguard/wolfi-base:latest@<WOLFI_DIGEST-from-step-1>
 
 # renovate: datasource=github-releases depName=bitwarden/clients extractVersion=^cli-v(?<version>.+)$
 ARG BW_VERSION=<from-step-1>
 ARG BW_SHA256=<from-step-2>
 
+# libstdc++ is needed by the bw binary (C++ runtime).
+# wget is not in wolfi-base by default; install for the bw zip fetch.
+# age and ca-certificates ride the wolfi-base digest pin — no version pin needed.
 RUN apk add --no-cache \
         ca-certificates \
-        "age=${AGE_VERSION}"
+        age \
+        libstdc++ \
+        wget
 
 RUN set -eu; \
     cd /tmp; \
@@ -112,7 +116,7 @@ RUN set -eu; \
     install -m 0755 bw /usr/local/bin/bw; \
     rm -f bw.zip bw
 
-RUN adduser -D -u 1000 -g 1000 backup
+RUN adduser -D -u 1000 backup
 
 COPY backup.sh /usr/local/bin/bitwarden-backup
 RUN chmod 0755 /usr/local/bin/bitwarden-backup
@@ -126,7 +130,12 @@ WORKDIR /tmp
 ENTRYPOINT ["/usr/local/bin/bitwarden-backup"]
 ```
 
-Substitute `<from-step-1>` and `<from-step-2>` with the literal values you noted.
+Substitute `<WOLFI_DIGEST-from-step-1>`, `<from-step-1>` (BW_VERSION), and `<from-step-2>` (BW_SHA256) with the literal values you noted. The `@sha256:...` on the FROM line is the digest pin; Renovate's docker manager updates it on each wolfi-base rebuild.
+
+Notes:
+- `unzip` is in wolfi-base by default (GNU `unzip` at `/usr/bin/unzip`), so it doesn't need installation.
+- Wolfi uses GNU coreutils throughout (`stat`, `find`, `date`, etc.), so the `stat -c%s` syntax in later tasks works without a busybox-vs-GNU caveat.
+- `adduser -D -u 1000` (no explicit `-g`) is correct on wolfi's shadow-style `adduser`; the `-g 1000` form from the spec was a busybox idiom. Verify with `adduser --help` if unsure.
 
 - [ ] **Step 4: Write a stub backup.sh**
 
@@ -280,7 +289,7 @@ Replace `images/bitwarden-backup/backup.sh` with:
 ```sh
 #!/bin/sh
 set -eu
-# busybox ash supports pipefail
+# pipefail is widely available but not POSIX; tolerate its absence.
 set -o pipefail 2>/dev/null || true
 
 step() {
@@ -1056,10 +1065,10 @@ Create `.github/renovate.json`:
       "commitMessageTopic": "bitwarden CLI"
     },
     {
-      "matchManagers": ["custom.regex"],
-      "matchDepNames": ["alpine_3_23/age"],
-      "groupName": "age (alpine apk)",
-      "commitMessageTopic": "age apk pin"
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["chainguard/wolfi-base"],
+      "groupName": "wolfi-base",
+      "commitMessageTopic": "wolfi-base"
     }
   ]
 }
@@ -1068,7 +1077,8 @@ Create `.github/renovate.json`:
 Notes on what this does:
 - `config:recommended` gives standard PR cadence, semantic commits, schedule.
 - The custom regex manager matches the `# renovate: ...` annotation comments in any `images/*/Dockerfile`, paired with the next `ARG`. This means new images get Renovate coverage automatically as long as they follow the annotation pattern.
-- The alpine base image (`FROM alpine:3.23`) is handled by Renovate's built-in `dockerfile` manager — no config needed.
+- The wolfi base image (`FROM chainguard/wolfi-base:latest@sha256:...`) is handled by Renovate's built-in `dockerfile` manager — it tracks both the tag and the digest and raises a PR when the digest under `:latest` changes (which happens daily on wolfi). The packageRule above just groups those PRs.
+- `age` no longer has a Renovate channel: it rides the wolfi-base digest. Whenever the wolfi-base PR merges, `apk add age` at build time picks up whatever age version is in the wolfi repo at that snapshot.
 - **Known limitation:** auto-cobumping the `BW_VERSION` and `BW_SHA256` pair is not handled by this config. Renovate will raise a `BW_VERSION` bump PR; the CI build will fail at `sha256sum -c`; the maintainer manually updates `BW_SHA256` in the same PR. See "Open items" at end of plan.
 
 - [ ] **Step 2: Validate JSON**
@@ -1095,9 +1105,8 @@ docker run --rm \
 ```
 
 Look in `/tmp/renovate-dryrun.log` for:
-- The string `bitwarden/clients` — confirms the bw ARG is detected.
-- The string `alpine_3_23/age` — confirms the age ARG is detected.
-- The string `alpine` (without `_3_23`) — confirms the `FROM alpine:3.23` line is detected by the built-in dockerfile manager.
+- The string `bitwarden/clients` — confirms the bw ARG is detected by the custom regex manager.
+- The string `chainguard/wolfi-base` — confirms the `FROM` line is detected by the built-in dockerfile manager.
 - No `error` or `WARN` lines mentioning the custom manager regex.
 
 If any of those are missing, iterate on the regex in `matchStrings` (the spec acknowledges this regex is the most failure-prone piece) and re-run the dry-run. The trailing `\s` in the regex is important — it requires a whitespace boundary after `currentValue`.
@@ -1106,7 +1115,7 @@ If any of those are missing, iterate on the regex in `matchStrings` (the spec ac
 
 ```bash
 git add .github/renovate.json
-git commit -m "ci: add Renovate config for alpine base, age apk pin, and bw release pin"
+git commit -m "ci: add Renovate config for wolfi base digest and bw release pin"
 ```
 
 ---
@@ -1164,13 +1173,13 @@ gh pr create --title "Add bitwarden-backup image and date-N tag scheme" --body "
 - New `images/bitwarden-backup/` image (Dockerfile + POSIX sh entrypoint).
 - CI workflow now tags images `YYYY-MM-DD-N` + `latest` via `crane ls`.
 - New entrypoint smoke test gates pushes.
-- New `.github/renovate.json` covers alpine base, age apk pin, and bw release pin.
+- New `.github/renovate.json` covers wolfi-base digest and bw release pin.
 
 ## Test plan
 - [ ] PR build job succeeds, including smoke-test.
 - [ ] On main-push, image appears in GHCR as `ghcr.io/drzero42/bitwarden-backup:2026-MM-DD-1` and `:latest`.
 - [ ] `crane manifest ghcr.io/drzero42/bitwarden-backup:2026-MM-DD-1` returns a manifest; digest captured for the cloudzero CronJob pin.
-- [ ] Renovate's first scheduled run picks up alpine, age, and bw pins (see Renovate dashboard / debug log).
+- [ ] Renovate's first scheduled run picks up wolfi-base digest and bw release pin (see Renovate dashboard / debug log).
 EOF
 )"
 ```
@@ -1218,7 +1227,7 @@ This verifies the `crane ls | grep | sed | sort -n | tail -1` logic actually inc
 
 - [ ] **Step 6: Confirm Renovate has indexed the repo**
 
-After Renovate's first scheduled scan (typically within an hour), check the Renovate dashboard issue (`Configure Renovate` / `Dependency Dashboard`) for entries naming `bitwarden/clients`, `alpine_3_23/age`, and `alpine`. If the dashboard is missing, enable `dependencyDashboard: true` in `renovate.json` and push.
+After Renovate's first scheduled scan (typically within an hour), check the Renovate dashboard issue (`Configure Renovate` / `Dependency Dashboard`) for entries naming `bitwarden/clients` and `chainguard/wolfi-base`. If the dashboard is missing, enable `dependencyDashboard: true` in `renovate.json` and push.
 
 - [ ] **Step 7: No further commit**
 
