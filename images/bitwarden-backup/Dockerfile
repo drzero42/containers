@@ -22,8 +22,7 @@ RUN set -eu; \
     install -m 0755 bw /usr/local/bin/bw; \
     rm -f bw.zip bw
 
-# wolfi's adduser is shadow-style. -D = no password.
-# Verify the syntax with `adduser --help` from the image if it errors.
+# wolfi's adduser is shadow-style (not busybox); -D = no password.
 RUN adduser -D -u 1000 backup
 
 COPY backup.sh /usr/local/bin/bitwarden-backup
