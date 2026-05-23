@@ -88,8 +88,11 @@ bw sync >/dev/null
 
 step 7 "bw export vault to json"
 # --raw is a global bw flag — must precede the subcommand (verified on bw 2026.4.2).
-# --password is encrypted_json-only per docs; included defensively in case a version re-prompts.
-bw --raw export --format json --password "$BW_PASSWORD" > "$plaintext"
+# Don't pass --password: it's only used for encrypted_json format, and putting
+# BW_PASSWORD on the cmdline would leak it via /proc/<pid>/cmdline — defeating
+# the *_FILE secret-mounting protection. If a future bw version re-prompts on
+# plaintext export, the script fails loudly rather than silently leaking.
+bw --raw export --format json > "$plaintext"
 
 step 8 "plaintext sanity check"
 size=$(stat -c%s "$plaintext")

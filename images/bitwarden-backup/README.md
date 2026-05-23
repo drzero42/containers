@@ -148,7 +148,7 @@ is unambiguous in CronJob logs:
 | Step | What |
 |---|---|
 | 1 | Resolve `*_FILE` inputs, validate required env, set defaults |
-| 2 | `mktemp` plaintext tempfile, install EXIT/INT/TERM trap to shred it |
+| 2 | `mktemp` plaintext tempfile, install EXIT/INT/TERM trap to delete it (memory-backed `/tmp` recommended so the plaintext never touches disk) |
 | 3 | `bw config server` |
 | 4 | `bw login --apikey` (reads `BW_CLIENTID`/`BW_CLIENTSECRET` from env) |
 | 5 | `bw unlock --passwordenv BW_PASSWORD --raw` → capture session |
