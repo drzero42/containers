@@ -88,7 +88,7 @@ spec:
               image: ghcr.io/drzero42/bitwarden-backup:2026-05-23-1@sha256:...
               env:
                 - name: BW_SERVER
-                  value: "https://vault.bitwarden.com"
+                  value: "https://vault.bitwarden.eu"
                 - name: BW_CLIENTID_FILE
                   value: /secrets/bw-clientid
                 - name: BW_CLIENTSECRET_FILE
@@ -153,7 +153,7 @@ is unambiguous in CronJob logs:
 | 4 | `bw login --apikey` (reads `BW_CLIENTID`/`BW_CLIENTSECRET` from env) |
 | 5 | `bw unlock --passwordenv BW_PASSWORD --raw` → capture session |
 | 6 | `bw sync` |
-| 7 | `bw --raw export --format json --password "$BW_PASSWORD"` → plaintext tempfile |
+| 7 | `bw --raw export --format json` → plaintext tempfile (no `--password` — it would leak the master password via `/proc/<pid>/cmdline`) |
 | 8 | Sanity check: plaintext ≥ `MIN_PLAINTEXT_BYTES` |
 | 9 | `age -r <key> -r <key> -o <out>.json.age` |
 | 10 | Prune `${FILENAME_PREFIX}-*.json.age` files older than `RETENTION_DAYS` |
