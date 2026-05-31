@@ -30,7 +30,7 @@ preferred for k8s deployments — values aren't visible in `ps` or
 
 | Variable | Secret? | Description |
 |---|---|---|
-| `BW_SERVER` | no | Bitwarden server URL (e.g. `https://vault.bitwarden.com` or a self-hosted URL) |
+| `BW_SERVER` | no | Bitwarden server URL (e.g. `https://vault.bitwarden.eu` or a self-hosted URL) |
 | `BW_CLIENTID` / `BW_CLIENTID_FILE` | yes | API client ID from your Bitwarden account (Settings → Security → Keys → API key) |
 | `BW_CLIENTSECRET` / `BW_CLIENTSECRET_FILE` | yes | API client secret from the same API key |
 | `BW_PASSWORD` / `BW_PASSWORD_FILE` | yes | Account master password — needed to unlock the vault session |
@@ -49,7 +49,7 @@ preferred for k8s deployments — values aren't visible in `ps` or
 
 ```sh
 docker run --rm \
-  -e BW_SERVER=https://vault.bitwarden.com \
+  -e BW_SERVER=https://vault.bitwarden.eu \
   -e BW_CLIENTID="$BW_CLIENTID" \
   -e BW_CLIENTSECRET="$BW_CLIENTSECRET" \
   -e BW_PASSWORD="$BW_PASSWORD" \
