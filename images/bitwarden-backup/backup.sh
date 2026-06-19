@@ -13,7 +13,7 @@ die() {
 }
 
 # Resolve a secret input from <VAR> or <VAR>_FILE.
-# Sets <VAR> in the parent environment via eval.
+# Sets and exports <VAR> so child processes (the `bw` CLI) inherit it.
 resolve_secret() {
     name=$1
     file_name="${name}_FILE"
@@ -41,6 +41,13 @@ resolve_secret() {
     if [ -z "$final" ]; then
         die "$name or $file_name must be set"
     fi
+
+    # Export so child processes (the `bw` CLI) inherit it. The _FILE branch sets
+    # a plain shell variable, which is NOT in the environment; without this,
+    # `bw login --apikey` / `bw unlock --passwordenv` can't see the value and
+    # fall back to interactive prompts. Re-exporting a plain-env value is a no-op.
+    # shellcheck disable=SC2163  # dynamic export by computed name is intended
+    export "$name"
 }
 
 require_env() {
