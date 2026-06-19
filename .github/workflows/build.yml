@@ -17,7 +17,7 @@ jobs:
       images: ${{ steps.list.outputs.images }}
       has_images: ${{ steps.list.outputs.has_images }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: list
         run: |
           shopt -s nullglob
@@ -44,7 +44,7 @@ jobs:
       matrix:
         image: ${{ fromJSON(needs.discover.outputs.images) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v3
 
