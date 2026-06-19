@@ -112,10 +112,16 @@ These were checked, not assumed:
 2. Confirm `age-plugin-yubikey --version` runs inside the image (the option-2
    check, performed locally before CI exists).
 3. **One-time local end-to-end**: the operator provides one real
-   `age1yubikey1…` recipient string locally (ephemeral, never committed); encrypt
-   a dummy payload to it with **no hardware attached** and confirm success —
-   proving recipient resolution works on the cluster side. Decrypt-with-hardware
-   is confirmed by the operator on their own machine.
+   `age1yubikey1…` recipient string locally and confirms success — proving
+   recipient resolution works on the cluster side, with **no hardware
+   attached**. Decrypt-with-hardware is confirmed by the operator on their own
+   machine.
+
+   The recipient string, although public, is treated with the same no-egress
+   discipline as the secrets: the operator writes it to a local file (e.g. the
+   gitignored `.env` or a sibling file); the test consumes it **by reference**
+   (env var / `--env-file`) and must never echo, cat, or otherwise print it.
+   It is never committed and never leaves the local machine.
 4. Confirm the new CI presence-check step passes on the PR.
 
 ## Open risks
