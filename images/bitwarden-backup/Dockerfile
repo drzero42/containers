@@ -2,7 +2,7 @@ FROM chainguard/wolfi-base:latest@sha256:e161445c05b19e668cb5cc44df2f0403329fd4f
 
 # renovate: datasource=github-releases depName=bitwarden/clients extractVersion=^cli-v(?<version>.+)$
 ARG BW_VERSION=2026.5.0
-ARG BW_SHA256=431dbe784cc7de217cb3a826993eac451aa2fbaf336538c0ff6602c1ac884c91
+ARG BW_SHA256=5ddbf5383bec9c71613d7b699ffa5249b5e7b68b2a3d15b4c75738ba8a8f9a19
 # checksum-sync: sha256Arg=BW_SHA256 url=https://github.com/bitwarden/clients/releases/download/cli-v${BW_VERSION}/bw-linux-${BW_VERSION}.zip
 
 # renovate: datasource=github-releases depName=str4d/age-plugin-yubikey extractVersion=^v(?<version>.+)$
