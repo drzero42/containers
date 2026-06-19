@@ -66,6 +66,29 @@ public key, and the plugin wraps the file key against it in software. That is
 what lets the CronJob run unattended. The physical key (plus PIN/touch) is
 required only at **decryption** time — see `RECOVERY.md`.
 
+### Generating a recipient
+
+Generate the recipient on the machine where the YubiKey is plugged in — not in
+the image. You need `age-plugin-yubikey` installed and the YubiKey's PIV
+application enabled (PIV rides the smart-card / CCID interface), plus a running
+PC/SC daemon (`pcscd`):
+
+```sh
+# One-time, if PIV is disabled (YubiKey 5 series; the FIDO-only Security Key
+# series has no PIV applet and cannot be used here):
+ykman config usb --enable PIV
+ykman info                       # confirm: PIV → Enabled
+
+# Create an age identity in a PIV slot and print its recipient:
+age-plugin-yubikey --generate    # prompts for PIN/touch policy; prints "Recipient: age1yubikey1…"
+
+# …or list recipients already set up on the inserted key:
+age-plugin-yubikey --list
+```
+
+Repeat on each YubiKey you want able to decrypt, then list all the printed
+`age1yubikey1…` values (space-separated) in `BITWARDEN_AGE_RECIPIENTS`.
+
 ## Local run
 
 ```sh
