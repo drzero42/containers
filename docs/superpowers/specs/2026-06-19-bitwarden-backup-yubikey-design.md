@@ -134,3 +134,24 @@ These were checked, not assumed:
 - **sha256 auto-bump** — inherits the same known limitation as `bw`: Renovate
   cannot bump the hash automatically, so a version-bump PR fails CI until the
   maintainer updates the hash. Acceptable and already documented for `bw`.
+
+## Amendments (from implementation verification)
+
+Resolved while writing the implementation plan
+(`docs/superpowers/plans/2026-06-19-bitwarden-backup-yubikey.md`):
+
+- **Plugin pinned to v0.5.0, not "latest".** The latest release (v0.5.1) ships
+  only macOS and Windows assets; v0.5.0 is the last release with an
+  `x86_64-linux` tarball
+  (`age-plugin-yubikey-v0.5.0-x86_64-linux.tar.gz`, sha256
+  `019b35a13fc81be56d73d0723db0a2082fbd04c936c2c6836381111f7f51b2c3`, binary at
+  `age-plugin-yubikey/age-plugin-yubikey` inside the tarball).
+- **`pcsc-lite` is required, not conditional.** `readelf -d` on the v0.5.0
+  binary shows `NEEDED libpcsclite.so.1`, so `pcsc-lite` is added to the apk
+  install unconditionally.
+- **Renovate is disabled for this dependency, not enabled.** Because upstream
+  dropped the Linux binary, letting Renovate bump the version would 404 the
+  asset and break the build. The dependency stays discoverable (the `# renovate:`
+  comment remains) but a `packageRule` sets `enabled: false`; the maintainer
+  bumps version + sha by hand and re-enables once upstream resumes Linux
+  releases.
