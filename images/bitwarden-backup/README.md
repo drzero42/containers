@@ -35,7 +35,7 @@ preferred for k8s deployments — values aren't visible in `ps` or
 | `BW_CLIENTSECRET` / `BW_CLIENTSECRET_FILE` | yes | API client secret from the same API key |
 | `BW_PASSWORD` / `BW_PASSWORD_FILE` | yes | Account master password — needed to unlock the vault session |
 | `BACKUP_DIR` | no | Path inside the container where the ciphertext and `RECOVERY.md` are written; mount a PVC or hostPath here |
-| `BITWARDEN_AGE_RECIPIENTS` | no | Whitespace-separated list of age recipients — software keys (`age1...`) and/or YubiKey keys (`age1yubikey1...`); at least one required. See [YubiKey recipients](#yubikey-recipients). |
+| `BITWARDEN_AGE_RECIPIENTS` | no | Whitespace-separated list of age recipients — software keys (`age1...`) and/or YubiKey keys (`age1yubikey1...`); at least one required. See [age recipients](#age-recipients). |
 
 ### Optional
 
@@ -45,14 +45,14 @@ preferred for k8s deployments — values aren't visible in `ps` or
 | `FILENAME_PREFIX` | `bitwarden` | Filename stem; full name is `<prefix>-YYYY-MM-DD.json.age` |
 | `MIN_PLAINTEXT_BYTES` | `1024` | Minimum size of the bw export before we'll encrypt — guards against a truncated/empty export silently overwriting yesterday's good backup |
 
-## YubiKey recipients
+## age recipients
 
-The image bundles [`age-plugin-yubikey`](https://github.com/str4d/age-plugin-yubikey),
-so `BITWARDEN_AGE_RECIPIENTS` may list YubiKey-backed recipients
-(`age1yubikey1...`) alongside or instead of software `age1...` keys. A
-single `.age` file is produced regardless of how many recipients you list,
-and **any one** of them can decrypt it (age wraps the file key per
-recipient — it does not encrypt multiple times).
+`BITWARDEN_AGE_RECIPIENTS` accepts software age keys (`age1...`) and/or
+YubiKey-backed keys (`age1yubikey1...`) — the image bundles
+[`age-plugin-yubikey`](https://github.com/str4d/age-plugin-yubikey) so the
+latter resolve. A single `.age` file is produced regardless of how many
+recipients you list, and **any one** of them can decrypt it (age wraps the
+file key per recipient — it does not encrypt multiple times).
 
 A typical hardware setup lists **two** YubiKey recipients — a primary and a
 backup key — so either can recover the vault:
@@ -67,6 +67,20 @@ what lets the CronJob run unattended. The physical key (plus PIN/touch) is
 required only at **decryption** time — see `RECOVERY.md`.
 
 ### Generating a recipient
+
+#### Software key
+
+Generate a keypair with age's own tool:
+
+```sh
+age-keygen -o key.txt     # writes the private key to key.txt; prints "Public key: age1…"
+```
+
+Put the printed `age1…` public key in `BITWARDEN_AGE_RECIPIENTS`. Keep `key.txt`
+(the private identity) **off the cluster** and safe — it decrypts the backups
+(see `RECOVERY.md`), and anyone who has it can read the entire vault.
+
+#### YubiKey
 
 Generate the recipient on the machine where the YubiKey is plugged in — not in
 the image. You need `age-plugin-yubikey` installed and the YubiKey's PIV
