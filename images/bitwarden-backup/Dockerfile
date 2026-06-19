@@ -3,10 +3,12 @@ FROM chainguard/wolfi-base:latest@sha256:5743937d521cbeb9e8c73bf1bd7ba2589c17894
 # renovate: datasource=github-releases depName=bitwarden/clients extractVersion=^cli-v(?<version>.+)$
 ARG BW_VERSION=2026.4.2
 ARG BW_SHA256=431dbe784cc7de217cb3a826993eac451aa2fbaf336538c0ff6602c1ac884c91
+# checksum-sync: sha256Arg=BW_SHA256 url=https://github.com/bitwarden/clients/releases/download/cli-v${BW_VERSION}/bw-linux-${BW_VERSION}.zip
 
 # renovate: datasource=github-releases depName=str4d/age-plugin-yubikey extractVersion=^v(?<version>.+)$
 ARG AGE_PLUGIN_YUBIKEY_VERSION=0.5.0
 ARG AGE_PLUGIN_YUBIKEY_SHA256=019b35a13fc81be56d73d0723db0a2082fbd04c936c2c6836381111f7f51b2c3
+# checksum-sync: sha256Arg=AGE_PLUGIN_YUBIKEY_SHA256 url=https://github.com/str4d/age-plugin-yubikey/releases/download/v${AGE_PLUGIN_YUBIKEY_VERSION}/age-plugin-yubikey-v${AGE_PLUGIN_YUBIKEY_VERSION}-x86_64-linux.tar.gz
 
 # libstdc++ is needed by the bw binary (C++ runtime).
 # pcsc-lite provides libpcsclite.so.1, needed by the age-plugin-yubikey binary.
