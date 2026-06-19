@@ -23,6 +23,12 @@
       "matchPackageNames": ["chainguard/wolfi-base"],
       "groupName": "wolfi-base",
       "commitMessageTopic": "wolfi-base"
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["str4d/age-plugin-yubikey"],
+      "enabled": false,
+      "description": "Pinned manually: upstream stopped publishing x86_64-linux release assets at v0.5.1. Bump AGE_PLUGIN_YUBIKEY_VERSION + AGE_PLUGIN_YUBIKEY_SHA256 by hand and re-enable this rule once Linux binaries resume."
     }
   ]
 }
