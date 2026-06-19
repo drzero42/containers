@@ -112,6 +112,19 @@ jobs:
           fi
           echo "smoke OK"
 
+      - name: Smoke test age-plugin-yubikey
+        if: matrix.image == 'bitwarden-backup'
+        run: |
+          set -euo pipefail
+          load_tag="${{ steps.tags.outputs.load_tag }}"
+          out=$(docker run --rm --entrypoint age-plugin-yubikey "${load_tag}" --version)
+          echo "$out"
+          if ! echo "$out" | grep -q '^age-plugin-yubikey '; then
+            echo "ERROR: age-plugin-yubikey --version output unexpected" >&2
+            exit 1
+          fi
+          echo "plugin smoke OK"
+
       - name: Push
         if: steps.tags.outputs.push == 'true'
         uses: docker/build-push-action@v6
