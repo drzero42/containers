@@ -35,7 +35,7 @@ preferred for k8s deployments — values aren't visible in `ps` or
 | `BW_CLIENTSECRET` / `BW_CLIENTSECRET_FILE` | yes | API client secret from the same API key |
 | `BW_PASSWORD` / `BW_PASSWORD_FILE` | yes | Account master password — needed to unlock the vault session |
 | `BACKUP_DIR` | no | Path inside the container where the ciphertext and `RECOVERY.md` are written; mount a PVC or hostPath here |
-| `BITWARDEN_AGE_RECIPIENTS` | no | Whitespace-separated list of age public keys (e.g. `age1abc... age1def...`); at least one required |
+| `BITWARDEN_AGE_RECIPIENTS` | no | Whitespace-separated list of age recipients — software keys (`age1...`) and/or YubiKey keys (`age1yubikey1...`); at least one required. See [YubiKey recipients](#yubikey-recipients). |
 
 ### Optional
 
@@ -44,6 +44,27 @@ preferred for k8s deployments — values aren't visible in `ps` or
 | `RETENTION_DAYS` | `30` | Delete `${FILENAME_PREFIX}-*.json.age` files in `BACKUP_DIR` older than this |
 | `FILENAME_PREFIX` | `bitwarden` | Filename stem; full name is `<prefix>-YYYY-MM-DD.json.age` |
 | `MIN_PLAINTEXT_BYTES` | `1024` | Minimum size of the bw export before we'll encrypt — guards against a truncated/empty export silently overwriting yesterday's good backup |
+
+## YubiKey recipients
+
+The image bundles [`age-plugin-yubikey`](https://github.com/str4d/age-plugin-yubikey),
+so `BITWARDEN_AGE_RECIPIENTS` may list YubiKey-backed recipients
+(`age1yubikey1...`) alongside or instead of software `age1...` keys. A
+single `.age` file is produced regardless of how many recipients you list,
+and **any one** of them can decrypt it (age wraps the file key per
+recipient — it does not encrypt multiple times).
+
+A typical hardware setup lists **two** YubiKey recipients — a primary and a
+backup key — so either can recover the vault:
+
+```sh
+BITWARDEN_AGE_RECIPIENTS="age1yubikey1qprimary... age1yubikey1qbackup..."
+```
+
+Encryption needs **no** YubiKey attached: the recipient string contains the
+public key, and the plugin wraps the file key against it in software. That is
+what lets the CronJob run unattended. The physical key (plus PIN/touch) is
+required only at **decryption** time — see `RECOVERY.md`.
 
 ## Local run
 
