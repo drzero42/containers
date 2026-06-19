@@ -5,3 +5,5 @@ devenv.local.yaml
 
 # direnv
 .direnv
+
+.env
