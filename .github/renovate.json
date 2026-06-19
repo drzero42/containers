@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "keepUpdatedLabel": "renovate-keep-updated",
+  "gitIgnoredAuthors": ["41898282+github-actions[bot]@users.noreply.github.com"],
   "customManagers": [
     {
       "customType": "regex",
@@ -18,8 +18,7 @@
       "matchDepNames": ["bitwarden/clients"],
       "groupName": "bitwarden-cli",
       "commitMessageTopic": "bitwarden CLI",
-      "addLabels": ["renovate-keep-updated"],
-      "description": "Renovate bumps BW_VERSION only; the matching BW_SHA256 cannot be tracked (the cli-v tag vs bare-version asset name defeats github-release-attachments digest support). CI's sync-checksums step recomputes and commits the hash onto the PR branch, and renovate-keep-updated keeps Renovate managing the branch despite that commit."
+      "description": "Renovate bumps BW_VERSION only; the matching BW_SHA256 cannot be tracked (the cli-v tag vs bare-version asset name defeats github-release-attachments digest support). CI's sync-checksums step recomputes and commits the hash onto the PR branch; gitIgnoredAuthors (top level) keeps Renovate from treating that bot commit as a foreign edit and blocking the branch."
     },
     {
       "matchManagers": ["dockerfile"],
