@@ -17,12 +17,16 @@ docker buildx build -t <name>:dev images/<name>
 
 ## Publishing
 
-CI handles publishing — on push to `main`, each image is tagged `latest` and `sha-<short>` and pushed to `ghcr.io/<owner>/<name>`. PRs build but do not push. No manual `docker push` workflow.
+CI handles publishing — on push to `main`, each image is tagged `YYYY-MM-DD-N` (N starts at 1 and increments per same-day rebuild) and `latest`, then pushed to `ghcr.io/<owner>/<name>`. PRs build but do not push. Consumers should pin by tag and digest.
 
 ## Adding a new image
 
 1. Create `images/<name>/Dockerfile` (plus any context files).
 2. Push. CI picks it up automatically from the `images/*` directory glob — no workflow edits needed.
+
+## Conventions
+
+- Secrets: every secret input on a k8s-bound image accepts both `FOO` env var and `FOO_FILE` (path to mounted Secret volume); both set is an error. Files are preferred for security — env vars are the fallback for local runs.
 
 ## Intentionally not here
 

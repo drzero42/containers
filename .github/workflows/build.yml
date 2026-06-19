@@ -56,24 +56,81 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up crane
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: imjasonh/setup-crane@v0.4
+
       - name: Compute tags
         id: tags
         run: |
+          set -euo pipefail
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           image="ghcr.io/${owner}/${{ matrix.image }}"
           short_sha="${GITHUB_SHA::7}"
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "tags=${image}:latest,${image}:sha-${short_sha}" >> "$GITHUB_OUTPUT"
+            date_today=$(date -u +%F)
+            # crane ls exits non-zero on a not-yet-published image; that's expected on first push.
+            existing=$(crane ls "${image}" 2>/dev/null \
+              | grep -E "^${date_today}-[0-9]+$" \
+              | sed "s/^${date_today}-//" \
+              | sort -n \
+              | tail -1 || true)
+            n=$(( ${existing:-0} + 1 ))
+            tag="${date_today}-${n}"
+            echo "tags=${image}:${tag},${image}:latest" >> "$GITHUB_OUTPUT"
+            echo "load_tag=${image}:${tag}" >> "$GITHUB_OUTPUT"
             echo "push=true" >> "$GITHUB_OUTPUT"
           else
             echo "tags=${image}:pr-${short_sha}" >> "$GITHUB_OUTPUT"
+            echo "load_tag=${image}:pr-${short_sha}" >> "$GITHUB_OUTPUT"
             echo "push=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: docker/build-push-action@v7
+      - name: Build (load locally for smoke test)
+        uses: docker/build-push-action@v7
         with:
           context: images/${{ matrix.image }}
-          push: ${{ steps.tags.outputs.push }}
+          load: true
+          tags: ${{ steps.tags.outputs.load_tag }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+      - name: Smoke test entrypoint
+        run: |
+          set -euo pipefail
+          load_tag="${{ steps.tags.outputs.load_tag }}"
+          # Run with no env vars; expect non-zero exit + "must be set" on stderr.
+          if docker run --rm "${load_tag}" >/tmp/smoke.stdout 2>/tmp/smoke.stderr; then
+            echo "ERROR: image exited 0 with no env vars set" >&2
+            cat /tmp/smoke.stdout /tmp/smoke.stderr >&2
+            exit 1
+          fi
+          if ! grep -q "must be set" /tmp/smoke.stderr; then
+            echo "ERROR: stderr did not contain 'must be set'" >&2
+            cat /tmp/smoke.stderr >&2
+            exit 1
+          fi
+          echo "smoke OK"
+
+      - name: Smoke test age-plugin-yubikey
+        if: matrix.image == 'bitwarden-backup'
+        run: |
+          set -euo pipefail
+          load_tag="${{ steps.tags.outputs.load_tag }}"
+          out=$(docker run --rm --entrypoint age-plugin-yubikey "${load_tag}" --version)
+          echo "$out"
+          if ! echo "$out" | grep -q '^age-plugin-yubikey '; then
+            echo "ERROR: age-plugin-yubikey --version output unexpected" >&2
+            exit 1
+          fi
+          echo "plugin smoke OK"
+
+      - name: Push
+        if: steps.tags.outputs.push == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: images/${{ matrix.image }}
+          push: true
           tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max

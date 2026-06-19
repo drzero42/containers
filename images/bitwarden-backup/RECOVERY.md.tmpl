@@ -1,0 +1,56 @@
+# Bitwarden vault recovery
+
+This directory contains encrypted exports of a Bitwarden vault. Filenames
+follow `<prefix>-YYYY-MM-DD.json.age`. Each file is an age-encrypted JSON
+export from `bw export --format json`.
+
+## To decrypt one file
+
+You need an age identity (private key) whose public key was listed in
+`BITWARDEN_AGE_RECIPIENTS` at backup time.
+
+```sh
+age -d -i /path/to/your.key -o vault.json <prefix>-YYYY-MM-DD.json.age
+```
+
+The resulting `vault.json` is the raw, unencrypted Bitwarden export. Treat
+it as a plaintext copy of every credential in the vault — store it on an
+encrypted volume only, and shred it when you're done.
+
+### If the recipient was a YubiKey
+
+If the backup was encrypted to a YubiKey recipient (`age1yubikey1...`), you
+need both [`age`](https://age-encryption.org/) and
+[`age-plugin-yubikey`](https://github.com/str4d/age-plugin-yubikey) installed,
+a running PC/SC daemon (`pcscd`), and one of the YubiKeys that was listed as a
+recipient inserted.
+
+```sh
+# With the YubiKey inserted, export a stub identity for it:
+age-plugin-yubikey --identity > yubikey-identity.txt
+
+# Decrypt (you will be prompted for the PIN and a touch):
+age -d -i yubikey-identity.txt -o vault.json <prefix>-YYYY-MM-DD.json.age
+
+# The identity stub holds no secret (just a pointer to the hardware slot):
+rm yubikey-identity.txt
+```
+
+Any one of the YubiKeys listed at backup time works — you do not need all of
+them.
+
+## To restore into a Bitwarden vault
+
+1. Stand up a fresh Bitwarden vault (Bitwarden.com account or self-hosted).
+2. Log into the web vault UI.
+3. Tools → Import data → pick "Bitwarden (json)" → upload `vault.json`.
+
+## Why age, not GPG?
+
+`age` is a minimal, modern file-encryption tool. The image only needs to
+produce ciphertext for a list of public-key recipients — `age` ships a
+single static binary, no keyring, no key-server, no metadata leaks.
+
+Public-key recipients are configured per-cluster via the
+`BITWARDEN_AGE_RECIPIENTS` env var, so adding a new recovery key is a
+config change rather than an image change.
