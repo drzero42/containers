@@ -1,6 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+  "keepUpdatedLabel": "renovate-keep-updated",
   "customManagers": [
     {
       "customType": "regex",
@@ -16,7 +17,9 @@
       "matchManagers": ["custom.regex"],
       "matchDepNames": ["bitwarden/clients"],
       "groupName": "bitwarden-cli",
-      "commitMessageTopic": "bitwarden CLI"
+      "commitMessageTopic": "bitwarden CLI",
+      "addLabels": ["renovate-keep-updated"],
+      "description": "Renovate bumps BW_VERSION only; the matching BW_SHA256 cannot be tracked (the cli-v tag vs bare-version asset name defeats github-release-attachments digest support). CI's sync-checksums step recomputes and commits the hash onto the PR branch, and renovate-keep-updated keeps Renovate managing the branch despite that commit."
     },
     {
       "matchManagers": ["dockerfile"],

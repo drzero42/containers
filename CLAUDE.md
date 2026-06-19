@@ -27,6 +27,7 @@ CI handles publishing — on push to `main`, each image is tagged `YYYY-MM-DD-N`
 ## Conventions
 
 - Secrets: every secret input on a k8s-bound image accepts both `FOO` env var and `FOO_FILE` (path to mounted Secret volume); both set is an error. Files are preferred for security — env vars are the fallback for local runs.
+- Pinned downloads: a release pinned by `ARG <X>_VERSION` + `ARG <X>_SHA256` gets a `# checksum-sync: sha256Arg=<X>_SHA256 url=<download-url with ${VERSION} refs>` annotation right after the SHA arg. Renovate bumps only the version (it can't track these hashes — `cli-v` tags vs bare-version asset names defeat its digest support). `scripts/sync-checksums.sh` recomputes the hash from the pinned version; CI runs it before each build (so a bump builds green) and the `persist-checksums` job commits the corrected hash onto the PR branch. `renovate-keep-updated` (`keepUpdatedLabel`) keeps Renovate managing the branch despite that commit. Tradeoff: the build-time `sha256sum -c` still guards against corrupted downloads, but auto-sync adopts whatever bytes upstream serves at bump time rather than detecting upstream re-publishing a version.
 
 ## Intentionally not here
 

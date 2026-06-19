@@ -86,6 +86,12 @@ jobs:
             echo "push=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Recompute pinned *_SHA256 args from the pinned version before building,
+      # so a Renovate version bump builds green even though Renovate can't update
+      # the checksum itself. The persist-checksums job pushes the fix back.
+      - name: Sync pinned checksums
+        run: bash scripts/sync-checksums.sh "images/${{ matrix.image }}/Dockerfile"
+
       - name: Build (load locally for smoke test)
         uses: docker/build-push-action@v7
         with:
@@ -134,3 +140,33 @@ jobs:
           tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+  # On a same-repo PR (e.g. Renovate's version bumps), commit any checksum the
+  # build had to recompute back onto the PR branch, so the merged source pins the
+  # correct hash. Runs only after a green build. Renovate keeps managing the
+  # branch despite this commit via keepUpdatedLabel (see .github/renovate.json).
+  persist-checksums:
+    needs: build
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Sync pinned checksums
+        run: bash scripts/sync-checksums.sh
+
+      - name: Commit & push if changed
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "checksums already in sync"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: sync pinned checksums"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
