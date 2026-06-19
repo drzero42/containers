@@ -143,8 +143,9 @@ jobs:
 
   # On a same-repo PR (e.g. Renovate's version bumps), commit any checksum the
   # build had to recompute back onto the PR branch, so the merged source pins the
-  # correct hash. Runs only after a green build. Renovate keeps managing the
-  # branch despite this commit via keepUpdatedLabel (see .github/renovate.json).
+  # correct hash. Runs only after a green build. This commit's author is listed in
+  # renovate.json's gitIgnoredAuthors so Renovate doesn't treat the branch as
+  # edited-by-a-stranger and stop managing it.
   persist-checksums:
     needs: build
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
