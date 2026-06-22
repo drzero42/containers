@@ -41,6 +41,7 @@ preferred for k8s deployments — values aren't visible in `ps` or
 
 | Variable | Default | Description |
 |---|---|---|
+| `BW_APPID` | _(unset)_ | A fixed device identifier (UUID) so Bitwarden stops emailing "New Device Logged In" on every run. See [Avoiding nightly "new device" emails](#avoiding-nightly-new-device-emails). Not a secret — a plain env var, no Secret mount needed. |
 | `RETENTION_DAYS` | `30` | Delete `${FILENAME_PREFIX}-*.json.age` files in `BACKUP_DIR` older than this |
 | `FILENAME_PREFIX` | `bitwarden` | Filename stem; full name is `<prefix>-YYYY-MM-DD.json.age` |
 | `MIN_PLAINTEXT_BYTES` | `1024` | Minimum size of the bw export before we'll encrypt — guards against a truncated/empty export silently overwriting yesterday's good backup |
@@ -103,11 +104,37 @@ age-plugin-yubikey --list
 Repeat on each YubiKey you want able to decrypt, then list all the printed
 `age1yubikey1…` values (space-separated) in `BITWARDEN_AGE_RECIPIENTS`.
 
+## Avoiding nightly "new device" emails
+
+Bitwarden sends a "New Device Logged In" email on every login that presents a
+device identifier it hasn't seen before, and there's no account setting to turn
+the notification off. The `bw` CLI stores its device id (`global_applicationId_appId`)
+in `data.json` inside `BITWARDENCLI_APPDATA_DIR`. Because the recommended setup
+uses a memory-backed `/tmp` that's wiped between runs, every CronJob run starts
+with an empty app-data dir, mints a **fresh** device id, and trips a fresh email
+— so you get one every night, which trains you to ignore the alert entirely.
+
+Set `BW_APPID` to a fixed UUID and every run looks like the **same** device: you
+get one email the first time, then silence. Any "new device" email after that is
+once again a real signal worth investigating.
+
+Generate a UUID once and keep it with your other config (it is not a secret —
+without the client id/secret and master password it unlocks nothing):
+
+```sh
+uuidgen                              # or: cat /proc/sys/kernel/random/uuid
+# e.g. 123e4567-e89b-12d3-a456-426614174000
+```
+
+Then pass it as `BW_APPID`. Leaving it unset preserves the old per-run-device
+behavior (a new email every run).
+
 ## Local run
 
 ```sh
 docker run --rm \
   -e BW_SERVER=https://vault.bitwarden.eu \
+  -e BW_APPID="$BW_APPID" \
   -e BW_CLIENTID="$BW_CLIENTID" \
   -e BW_CLIENTSECRET="$BW_CLIENTSECRET" \
   -e BW_PASSWORD="$BW_PASSWORD" \
@@ -147,6 +174,8 @@ spec:
               env:
                 - name: BW_SERVER
                   value: "https://vault.bitwarden.eu"
+                - name: BW_APPID
+                  value: "123e4567-e89b-12d3-a456-426614174000" # your own fixed UUID
                 - name: BW_CLIENTID_FILE
                   value: /secrets/bw-clientid
                 - name: BW_CLIENTSECRET_FILE
@@ -207,7 +236,7 @@ is unambiguous in CronJob logs:
 |---|---|
 | 1 | Resolve `*_FILE` inputs, validate required env, set defaults |
 | 2 | `mktemp` plaintext tempfile, install EXIT/INT/TERM trap to delete it (memory-backed `/tmp` recommended so the plaintext never touches disk) |
-| 3 | `bw config server` |
+| 3 | Seed a fixed device id into `data.json` when `BW_APPID` is set (avoids nightly "new device" emails), then `bw config server` |
 | 4 | `bw login --apikey` (reads `BW_CLIENTID`/`BW_CLIENTSECRET` from env) |
 | 5 | `bw unlock --passwordenv BW_PASSWORD --raw` → capture session |
 | 6 | `bw sync` |
