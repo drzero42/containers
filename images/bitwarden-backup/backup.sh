@@ -70,6 +70,14 @@ resolve_secret BW_PASSWORD
 require_env BACKUP_DIR
 require_env BITWARDEN_AGE_RECIPIENTS
 
+# Optional: a stable device identifier (a UUID). Not a secret — see step 3.
+if [ -n "${BW_APPID:-}" ]; then
+    case "$BW_APPID" in
+        ????????-????-????-????-????????????) : ;;
+        *) die "BW_APPID must be a UUID like 123e4567-e89b-12d3-a456-426614174000 (generate one with: uuidgen)" ;;
+    esac
+fi
+
 : "${RETENTION_DAYS:=30}"
 : "${FILENAME_PREFIX:=bitwarden}"
 : "${MIN_PLAINTEXT_BYTES:=1024}"
@@ -79,7 +87,24 @@ step 2 "set up tmpfile and cleanup trap"
 plaintext=$(mktemp /tmp/bw-exportXXXXXX)
 trap 'rm -f "$plaintext"' EXIT INT TERM
 
-step 3 "configure bitwarden server"
+step 3 "pin device identity and configure bitwarden server"
+# Pin a stable device identifier so Bitwarden stops emailing "New Device Logged
+# In" on every run. The bw CLI stores its device id as global_applicationId_appId
+# in data.json; in an ephemeral container that file is recreated each run, so a
+# fresh id — and a fresh email — is minted every night. Seeding a fixed id makes
+# every run look like the same device: you get one email when you first set
+# BW_APPID, then silence, which means a future "new device" email is once again a
+# real signal worth reacting to. bw merges data.json (read-modify-write), so the
+# seeded id survives both `config server` below and `login` in step 4.
+#
+# BW_APPID is NOT a secret: without the client id/secret and master password it
+# unlocks nothing, so it's a plain env var (no Secret mount needed). Seeding is
+# opt-in — unset BW_APPID keeps the old per-run-device behavior.
+if [ -n "${BW_APPID:-}" ]; then
+    require_env BITWARDENCLI_APPDATA_DIR  # else bw reads a different dir and the seed is ignored
+    mkdir -p "$BITWARDENCLI_APPDATA_DIR"
+    printf '{"global_applicationId_appId":"%s"}\n' "$BW_APPID" > "$BITWARDENCLI_APPDATA_DIR/data.json"
+fi
 bw config server "$BW_SERVER" >/dev/null
 
 step 4 "bw login --apikey"
