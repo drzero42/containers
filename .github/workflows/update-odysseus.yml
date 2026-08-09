@@ -1,0 +1,53 @@
+name: update-odysseus
+
+# Bump the pinned Odysseus AI source commit when upstream moves. Upstream
+# (odysseus-dev/odysseus) publishes no pullable image and no tags; its
+# curated stable branch is `main` (fast-forwarded at releases, while `dev`
+# rolls). We pin main's HEAD commit in the Dockerfile and commit the bump
+# straight to main; the push triggers build.yml which builds and publishes.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check for newer upstream commit
+        id: check
+        run: |
+          set -euo pipefail
+          dockerfile="images/odysseus-ai/Dockerfile"
+
+          pinned=$(sed -n 's|^ARG ODYSSEUS_SHA=\([0-9a-f]\{40\}\).*|\1|p' "$dockerfile" | head -1)
+          [ -n "$pinned" ] || { echo "ERROR: no ODYSSEUS_SHA pin found in $dockerfile" >&2; exit 1; }
+
+          head=$(curl -fsSL https://api.github.com/repos/odysseus-dev/odysseus/commits/main \
+            | jq -r .sha)
+          [ ${#head} -eq 40 ] || { echo "ERROR: could not resolve upstream main HEAD" >&2; exit 1; }
+
+          echo "pinned=${pinned} upstream=${head}"
+          if [ "$head" = "$pinned" ]; then
+            echo "up-to-date"
+            echo "update=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          sed -i "s|^ARG ODYSSEUS_SHA=${pinned}|ARG ODYSSEUS_SHA=${head}|" "$dockerfile"
+          echo "update=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit & push if updated
+        if: steps.check.outputs.update == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "feat(odysseus-ai): bump upstream source pin"
+          git push origin HEAD:main

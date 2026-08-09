@@ -102,6 +102,7 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
 
       - name: Smoke test entrypoint
+        if: matrix.image == 'bitwarden-backup'
         run: |
           set -euo pipefail
           load_tag="${{ steps.tags.outputs.load_tag }}"
@@ -117,6 +118,20 @@ jobs:
             exit 1
           fi
           echo "smoke OK"
+
+      - name: Smoke test kagi-cli
+        if: matrix.image == 'odysseus-ai'
+        run: |
+          set -euo pipefail
+          load_tag="${{ steps.tags.outputs.load_tag }}"
+          # Override the server entrypoint; only check the kagi binary works.
+          out=$(timeout 120 docker run --rm --entrypoint kagi "${load_tag}" --version)
+          echo "$out"
+          if ! echo "$out" | grep -q '^kagi '; then
+            echo "ERROR: kagi --version output unexpected" >&2
+            exit 1
+          fi
+          echo "kagi smoke OK"
 
       - name: Smoke test age-plugin-yubikey
         if: matrix.image == 'bitwarden-backup'
