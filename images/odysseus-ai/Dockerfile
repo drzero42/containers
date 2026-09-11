@@ -6,7 +6,7 @@
 # against a pinned checkout. If upstream's Dockerfile changes, this one must
 # be re-synced — a build failure here is the signal.
 
-ARG ODYSSEUS_SHA=049a81b941c8e003827800f7fb61f8ad78c175ac
+ARG ODYSSEUS_SHA=934d23c0be29c9721385f34565c0ae2cbd60da04
 
 # ---- pinned upstream checkout ----
 FROM chainguard/wolfi-base:latest@sha256:0b613d8101fae27cf76186351db831ab3db25bfb2ec7161e897cd7e22c6413a3 AS src
