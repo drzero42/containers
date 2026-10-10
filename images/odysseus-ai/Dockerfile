@@ -9,7 +9,7 @@
 ARG ODYSSEUS_SHA=934d23c0be29c9721385f34565c0ae2cbd60da04
 
 # ---- pinned upstream checkout ----
-FROM chainguard/wolfi-base:latest@sha256:0b613d8101fae27cf76186351db831ab3db25bfb2ec7161e897cd7e22c6413a3 AS src
+FROM chainguard/wolfi-base:latest@sha256:1c451d46a0d5c4e9f2b38e0e8d3e299564a1aa95c21973efcc1980a9d1d2e73e AS src
 ARG ODYSSEUS_SHA
 RUN apk add --no-cache git \
     && git clone https://github.com/odysseus-dev/odysseus.git /src \
@@ -18,7 +18,7 @@ RUN apk add --no-cache git \
     && rm -rf .git
 
 # ---- kagi-cli binary ----
-FROM chainguard/wolfi-base:latest@sha256:0b613d8101fae27cf76186351db831ab3db25bfb2ec7161e897cd7e22c6413a3 AS kagi-fetch
+FROM chainguard/wolfi-base:latest@sha256:1c451d46a0d5c4e9f2b38e0e8d3e299564a1aa95c21973efcc1980a9d1d2e73e AS kagi-fetch
 
 # renovate: datasource=github-releases depName=Microock/kagi-cli extractVersion=^v(?<version>.+)$
 ARG KAGI_VERSION=0.16.0
