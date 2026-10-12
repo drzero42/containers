@@ -58,7 +58,7 @@ jobs:
 
       - name: Set up crane
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: imjasonh/setup-crane@v0.6
+        uses: imjasonh/setup-crane@v0.7
 
       - name: Compute tags
         id: tags
