@@ -1,0 +1,65 @@
+# UniFi Network backup recovery
+
+This directory contains encrypted UniFi Network application backups.
+Filenames follow `<prefix>-YYYY-MM-DD-network-<version>.unf.age`, where
+`<version>` is the Network application version that made the backup. Each
+file is an age-encrypted `.unf`, the Network application's own backup
+format.
+
+## What a .unf holds, and what it doesn't
+
+A `.unf` holds the **Network application** only: networks, Wi-Fi, firewall,
+routing, adopted devices, clients and their settings. It does **not** hold
+UniFi OS itself: local admin accounts, Control Plane settings and other
+applications. Those are only in a **System Config Backup** (`.unifi`), made
+in Settings > Control Plane > Backups (Super Admin or owner only). After a
+`.unf` restore, recreate what UniFi OS lost by hand, or restore a `.unifi`
+first.
+
+A `.unf` restores only onto the **same or a newer** Network application
+version than the one in its filename.
+
+## To decrypt one file
+
+You need an age identity (private key) whose public key was listed in
+`AGE_RECIPIENTS` at backup time.
+
+```sh
+age -d -i /path/to/your.key -o backup.unf <prefix>-YYYY-MM-DD-network-<version>.unf.age
+```
+
+The `.unf` contains Wi-Fi passwords, admin password hashes and VPN keys.
+Keep it on an encrypted volume only and shred it when you're done.
+
+### If the recipient was a YubiKey
+
+If the backup was encrypted to a YubiKey recipient (`age1yubikey1...`), you
+need both [`age`](https://age-encryption.org/) and
+[`age-plugin-yubikey`](https://github.com/str4d/age-plugin-yubikey) installed,
+a running PC/SC daemon (`pcscd`), and one of the YubiKeys that was listed as a
+recipient inserted.
+
+```sh
+# With the YubiKey inserted, export a stub identity for it:
+age-plugin-yubikey --identity > yubikey-identity.txt
+
+# Decrypt (you will be prompted for the PIN and a touch):
+age -d -i yubikey-identity.txt -o backup.unf <prefix>-YYYY-MM-DD-network-<version>.unf.age
+
+# The identity stub holds no secret (just a pointer to the hardware slot):
+rm yubikey-identity.txt
+```
+
+Any one of the YubiKeys listed at backup time works — you do not need all of
+them.
+
+## To restore
+
+1. Bring the gateway or console up, set it up and update the Network
+   application to at least the version in the filename. Leave the other
+   UniFi devices connected as they were.
+2. Settings > Control Plane > Backups > Restore, then upload `backup.unf`.
+3. Wait for every device to come back online.
+
+Ubiquiti's guide: <https://help.ui.com/hc/en-us/articles/360008976393>
+("Backups and Migration in UniFi", section "Network-Only Backups").

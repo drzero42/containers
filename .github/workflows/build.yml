@@ -102,7 +102,7 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
 
       - name: Smoke test entrypoint
-        if: matrix.image == 'bitwarden-backup'
+        if: contains(fromJSON('["bitwarden-backup", "unifi-backup"]'), matrix.image)
         run: |
           set -euo pipefail
           load_tag="${{ steps.tags.outputs.load_tag }}"
@@ -120,7 +120,7 @@ jobs:
           echo "smoke OK"
 
       - name: Smoke test age-plugin-yubikey
-        if: matrix.image == 'bitwarden-backup'
+        if: contains(fromJSON('["bitwarden-backup", "unifi-backup"]'), matrix.image)
         run: |
           set -euo pipefail
           load_tag="${{ steps.tags.outputs.load_tag }}"
