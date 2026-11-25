@@ -1,20 +1,24 @@
-# UniFi Network backup recovery
+# UniFi backup recovery
 
-This directory contains encrypted UniFi Network application backups.
-Filenames follow `<prefix>-YYYY-MM-DD-network-<version>.unf.age`, where
-`<version>` is the Network application version that made the backup. Each
-file is an age-encrypted `.unf`, the Network application's own backup
-format.
+This directory contains age-encrypted UniFi backups of two kinds:
 
-## What a .unf holds, and what it doesn't
+| File | Holds |
+|---|---|
+| `<prefix>-YYYY-MM-DD-system.unifi.age` | **System Config Backup** (`.unifi`): UniFi OS, its local admins, Control Plane settings and every application, Network included |
+| `<prefix>-YYYY-MM-DD-network-<version>.unf.age` | **Network backup** (`.unf`): the Network application only (networks, Wi-Fi, firewall, routing, adopted devices, clients) |
 
-A `.unf` holds the **Network application** only: networks, Wi-Fi, firewall,
-routing, adopted devices, clients and their settings. It does **not** hold
-UniFi OS itself: local admin accounts, Control Plane settings and other
-applications. Those are only in a **System Config Backup** (`.unifi`), made
-in Settings > Control Plane > Backups (Super Admin or owner only). After a
-`.unf` restore, recreate what UniFi OS lost by hand, or restore a `.unifi`
-first.
+`<version>` is the Network application version that made the `.unf`. Which
+kinds exist depends on the job's `BACKUP_KINDS`.
+
+## Which file to use
+
+- **Gateway or console lost or reset: restore the newest `.unifi`.** It
+  brings back UniFi OS and the Network application together.
+- **Only the Network configuration is broken, UniFi OS is fine: a `.unf` is
+  enough** and leaves UniFi OS, its admins and other applications as they
+  are.
+- **No `.unifi` available: restore a `.unf`**, then recreate by hand what it
+  lacks (local admins, Control Plane settings, other applications).
 
 A `.unf` restores only onto the **same or a newer** Network application
 version than the one in its filename.
@@ -25,11 +29,12 @@ You need an age identity (private key) whose public key was listed in
 `AGE_RECIPIENTS` at backup time.
 
 ```sh
+age -d -i /path/to/your.key -o backup.unifi <prefix>-YYYY-MM-DD-system.unifi.age
 age -d -i /path/to/your.key -o backup.unf <prefix>-YYYY-MM-DD-network-<version>.unf.age
 ```
 
-The `.unf` contains Wi-Fi passwords, admin password hashes and VPN keys.
-Keep it on an encrypted volume only and shred it when you're done.
+Both formats contain Wi-Fi passwords, admin password hashes and VPN keys.
+Keep them on an encrypted volume only and shred them when you're done.
 
 ### If the recipient was a YubiKey
 
@@ -44,7 +49,7 @@ recipient inserted.
 age-plugin-yubikey --identity > yubikey-identity.txt
 
 # Decrypt (you will be prompted for the PIN and a touch):
-age -d -i yubikey-identity.txt -o backup.unf <prefix>-YYYY-MM-DD-network-<version>.unf.age
+age -d -i yubikey-identity.txt -o <backup file> <prefix>-YYYY-MM-DD-...age
 
 # The identity stub holds no secret (just a pointer to the hardware slot):
 rm yubikey-identity.txt
@@ -55,11 +60,12 @@ them.
 
 ## To restore
 
-1. Bring the gateway or console up, set it up and update the Network
-   application to at least the version in the filename. Leave the other
-   UniFi devices connected as they were.
-2. Settings > Control Plane > Backups > Restore, then upload `backup.unf`.
+1. Bring the gateway or console up and set it up. For a `.unf`, update the
+   Network application to at least the version in the filename. Leave the
+   other UniFi devices connected as they were.
+2. Settings > Control Plane > Backups > Restore from Backup, then upload
+   `backup.unifi` or `backup.unf`.
 3. Wait for every device to come back online.
 
 Ubiquiti's guide: <https://help.ui.com/hc/en-us/articles/360008976393>
-("Backups and Migration in UniFi", section "Network-Only Backups").
+("Backups and Migration in UniFi").

@@ -77,17 +77,36 @@ require_env AGE_RECIPIENTS
 : "${RETENTION_DAYS:=30}"
 : "${FILENAME_PREFIX:=unifi}"
 : "${MIN_PLAINTEXT_BYTES:=16384}"
+: "${BACKUP_KINDS:=network}"
 
 case "$UNIFI_PINNED_PUBKEY" in
     ''|sha256//*) : ;;
     *) die "UNIFI_PINNED_PUBKEY must look like sha256//<base64>; see README" ;;
 esac
 
+want_network=
+want_system=
+for kind in $BACKUP_KINDS; do
+    case "$kind" in
+        network) want_network=1 ;;
+        system) want_system=1 ;;
+        *) die "BACKUP_KINDS: unknown kind '$kind' (use network and/or system)" ;;
+    esac
+done
+[ -n "$want_network$want_system" ] || die "BACKUP_KINDS lists no backup kind"
+
+# Build age argv as -r key1 -r key2 ... from the whitespace-separated env var.
+recipients=
+# shellcheck disable=SC2086
+for r in $AGE_RECIPIENTS; do
+    recipients="$recipients -r $r"
+done
+[ -n "$recipients" ] || die "AGE_RECIPIENTS expanded to zero recipients"
+
 step 2 "set up tmpfiles and cleanup trap"
 # busybox mktemp requires the X-run to be the last template chars (no suffix).
 work=$(mktemp -d /tmp/unifi-backupXXXXXX)
 cookies="$work/cookies"
-plaintext="$work/backup.unf"
 logged_in=
 logout() {
     if [ -n "$logged_in" ]; then
@@ -116,6 +135,87 @@ api() {
 }
 csrf=
 
+# The kind functions below report errors and return 1 instead of exiting, so
+# one failed kind doesn't stop the other. Callers run them in an if, which
+# disables set -e inside them: every failing command needs an explicit check.
+fail() {
+    printf '%s\n' "$1" >&2
+    return 1
+}
+
+# Refuse to encrypt a likely-truncated download: it would replace a good backup.
+check_size() {
+    size=$(stat -c%s "$1") || return 1
+    if [ "$size" -lt "$MIN_PLAINTEXT_BYTES" ]; then
+        fail "$1 is $size bytes (< MIN_PLAINTEXT_BYTES=$MIN_PLAINTEXT_BYTES); refusing to encrypt a likely-truncated download"
+        return 1
+    fi
+}
+
+# encrypt <plaintext> <output>; same-day reruns overwrite on purpose.
+encrypt() {
+    # shellcheck disable=SC2086  # recipients holds "-r key" pairs without spaces in keys
+    age $recipients -o "$2" < "$1" || return 1
+    rm -f "$1"
+    echo "wrote $2" >&2
+}
+
+# Top level only: manual downloads in subdirectories are never pruned.
+prune() {
+    find "$BACKUP_DIR" -maxdepth 1 -type f -name "$1" \
+        -mtime "+${RETENTION_DAYS}" -delete
+}
+
+backup_network() {
+    plaintext="$work/backup.unf"
+    # days=-1 includes all history the application keeps. Needs Network: Full
+    # Admin; no Control Plane rights.
+    resp=$(api -X POST -H 'Content-Type: application/json' \
+        --data-binary '{"cmd":"backup","days":-1}' \
+        "$base/proxy/network/api/s/${UNIFI_SITE}/cmd/backup") || {
+        fail "network backup request failed: $resp"
+        return 1
+    }
+    url=$(printf '%s' "$resp" | jq -r 'select(.meta.rc == "ok") | .data[0].url // empty')
+    case "$url" in
+        /dl/backup/*.unf) : ;;
+        *) fail "unexpected network backup response: $resp"; return 1 ;;
+    esac
+    version=${url#/dl/backup/}
+    version=${version%.unf}
+    case "$version" in
+        *[!0-9A-Za-z._-]*|'') fail "unexpected network backup file name: $url"; return 1 ;;
+    esac
+    echo "downloading ${version}.unf" >&2
+    api -o "$plaintext" "$base/proxy/network${url}" || {
+        fail "network backup download failed"
+        return 1
+    }
+    check_size "$plaintext" || return 1
+    # The Network version is in the name: a .unf restores only on the same or
+    # a newer Network application.
+    encrypt "$plaintext" \
+        "${BACKUP_DIR}/${FILENAME_PREFIX}-$(date -u +%F)-network-${version}.unf.age" ||
+        return 1
+    prune "${FILENAME_PREFIX}-*.unf.age"
+}
+
+backup_system() {
+    plaintext="$work/backup.unifi"
+    # The System Config Backup: UniFi OS, its admins and every application.
+    # The console makes it on the spot. Needs a Super Admin (or the owner);
+    # every narrower role gets 403 ACTION_FORBIDDEN.
+    api -o "$plaintext" "$base/api/backup/download" || {
+        fail "system backup download failed (the account must be a Super Admin): $(head -c 512 "$plaintext" 2>/dev/null)"
+        return 1
+    }
+    check_size "$plaintext" || return 1
+    encrypt "$plaintext" \
+        "${BACKUP_DIR}/${FILENAME_PREFIX}-$(date -u +%F)-system.unifi.age" ||
+        return 1
+    prune "${FILENAME_PREFIX}-*.unifi.age"
+}
+
 step 3 "log in to UniFi OS as $UNIFI_USERNAME"
 # The password goes to curl on stdin, never on its command line.
 jq -n '{username: env.UNIFI_USERNAME, password: env.UNIFI_PASSWORD, rememberMe: false}' |
@@ -131,63 +231,24 @@ token=$(awk '$6 == "TOKEN" { print $7 }' "$cookies")
 csrf=$(jwt_payload "$token" | jq -r '.csrfToken // empty')
 [ -n "$csrf" ] || die "TOKEN cookie carries no csrfToken"
 
-step 4 "ask the Network application for a backup"
-# days=-1 includes all history the application keeps. Works with Network:
-# Full Admin; the full UniFi OS backup (/api/backup/download) would need Super Admin.
-resp=$(api -X POST -H 'Content-Type: application/json' \
-    --data-binary '{"cmd":"backup","days":-1}' \
-    "$base/proxy/network/api/s/${UNIFI_SITE}/cmd/backup") ||
-    die "backup request failed: $resp"
-url=$(printf '%s' "$resp" | jq -r 'select(.meta.rc == "ok") | .data[0].url // empty')
-case "$url" in
-    /dl/backup/*.unf) : ;;
-    *) die "unexpected backup response: $resp" ;;
-esac
-version=${url#/dl/backup/}
-version=${version%.unf}
-case "$version" in
-    *[!0-9A-Za-z._-]*|'') die "unexpected backup file name: $url" ;;
-esac
-
-step 5 "download ${version}.unf"
-api -o "$plaintext" "$base/proxy/network${url}"
-
-step 6 "plaintext sanity check"
-size=$(stat -c%s "$plaintext")
-if [ "$size" -lt "$MIN_PLAINTEXT_BYTES" ]; then
-    die "backup is $size bytes (< MIN_PLAINTEXT_BYTES=$MIN_PLAINTEXT_BYTES); refusing to encrypt a likely-truncated download"
+failed=
+if [ -n "$want_network" ]; then
+    step 4 "Network application backup (.unf)"
+    backup_network || failed="$failed network"
+fi
+if [ -n "$want_system" ]; then
+    step 5 "System Config Backup (.unifi)"
+    backup_system || failed="$failed system"
 fi
 
-step 7 "encrypt with age"
-# Build argv as -r key1 -r key2 ... from whitespace-separated env var.
-set --
-# shellcheck disable=SC2086
-for r in $AGE_RECIPIENTS; do
-    set -- "$@" -r "$r"
-done
-if [ "$#" -eq 0 ]; then
-    die "AGE_RECIPIENTS expanded to zero recipients"
-fi
-
-# The Network version is in the name: a .unf restores only on the same or a
-# newer Network application.
-out="${BACKUP_DIR}/${FILENAME_PREFIX}-$(date -u +%F)-network-${version}.unf.age"
-# Intentional: same-day reruns overwrite.
-age "$@" -o "$out" < "$plaintext"
-echo "wrote $out" >&2
-
-step 8 "prune old backups"
-# Top level only: manual downloads in subdirectories are never pruned.
-find "$BACKUP_DIR" -maxdepth 1 -type f \
-    -name "${FILENAME_PREFIX}-*.unf.age" \
-    -mtime "+${RETENTION_DAYS}" \
-    -delete
-
-step 9 "refresh RECOVERY.md"
+step 6 "refresh RECOVERY.md"
 cp /usr/share/unifi-backup/RECOVERY.md "${BACKUP_DIR}/RECOVERY.md"
 
-step 10 "log out"
+step 7 "log out"
 logout
 logged_in=
 
+if [ -n "$failed" ]; then
+    die "backup failed for:$failed"
+fi
 echo "backup complete" >&2
