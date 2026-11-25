@@ -32,7 +32,7 @@ only UniFi OS user management), gets `403 ACTION_FORBIDDEN` from
 `/api/backup/download` and from downloading the console's stored backups
 (`/api/backup/local/<id>/download`). That puts an owner-equivalent
 password in the job's secret; weigh it against the gap. `RECOVERY.md`
-lists what a `.unf` leaves out.
+says which file to restore when.
 
 With both kinds, the `.unf` is fetched first; if the `.unifi` then fails,
 the `.unf` is still written and the job exits non-zero.

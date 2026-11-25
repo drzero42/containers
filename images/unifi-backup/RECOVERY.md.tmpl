@@ -12,16 +12,21 @@ kinds exist depends on the job's `BACKUP_KINDS`.
 
 ## Which file to use
 
-- **Gateway or console lost or reset: restore the newest `.unifi`.** It
-  brings back UniFi OS and the Network application together.
-- **Only the Network configuration is broken, UniFi OS is fine: a `.unf` is
-  enough** and leaves UniFi OS, its admins and other applications as they
-  are.
-- **No `.unifi` available: restore a `.unf`**, then recreate by hand what it
-  lacks (local admins, Control Plane settings, other applications).
+- **Default: restore the newest `.unifi`.** It brings back UniFi OS and the
+  Network application together, and it can be restored onto a different
+  console model as long as that console runs UniFi OS 3.1 or newer.
+- **Only the Network configuration is broken, UniFi OS is fine: restore the
+  `.unifi` and select only the Network application.** A System Config Backup
+  can be restored partially; the rest of UniFi OS (admins, Control Plane
+  settings, other applications) stays as it is.
+- **Fallback: restore a `.unf`** when no `.unifi` is available or it won't
+  restore, or onto a self-hosted Network application. Afterwards recreate by
+  hand what it lacks (local admins, Control Plane settings, other
+  applications).
 
-A `.unf` restores only onto the **same or a newer** Network application
-version than the one in its filename.
+No backup restores onto an **older** application version. A `.unf` needs
+the same or a newer Network application than the version in its filename.
+A restore can't add hardware features the replacement console lacks.
 
 ## To decrypt one file
 
@@ -60,12 +65,27 @@ them.
 
 ## To restore
 
-1. Bring the gateway or console up and set it up. For a `.unf`, update the
-   Network application to at least the version in the filename. Leave the
-   other UniFi devices connected as they were.
-2. Settings > Control Plane > Backups > Restore from Backup, then upload
-   `backup.unifi` or `backup.unf`.
+Swap in the replacement gateway or console and leave the other UniFi devices
+connected as they were.
+
+### A `.unifi`
+
+1. Restore it during the console's first setup, or later from Settings >
+   Control Plane > Backups > Restore from Backup, and upload `backup.unifi`.
+2. Pick the applications and settings to restore (all of them for a full
+   recovery, only Network for a Network-only rollback).
 3. Wait for every device to come back online.
+
+### A `.unf`
+
+1. The first-setup restore screen only accepts a `.unifi`: skip it and set
+   the console up fresh.
+2. Update the Network application to at least the version in the filename.
+3. Settings > Control Plane > Backups > Restore from Backup, and upload
+   `backup.unf`.
+4. Wait for every device to come back online. If they're on a different
+   Layer 3 subnet from the new console and don't show up, enable Override
+   Inform Host in the Network application and enter the console's IP.
 
 Ubiquiti's guide: <https://help.ui.com/hc/en-us/articles/360008976393>
 ("Backups and Migration in UniFi").
